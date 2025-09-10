@@ -167,7 +167,11 @@ export default function App() {
             </button>
           </form>
 
-          {error && <div className="qa-error" role="alert">Error: {error}</div>}
+          {error && (
+            <div className="qa-error" role="alert">
+              Error: {error}
+            </div>
+          )}
 
           <div className="qa-answer-card">
             <div className="answer-header">

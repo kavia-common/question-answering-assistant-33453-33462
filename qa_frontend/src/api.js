@@ -4,33 +4,45 @@
 // Uses REACT_APP_BACKEND_URL if provided; otherwise falls back to a detected backend URL.
 // For local development the default fallback is http://localhost:3001.
 //
-// PUBLIC_INTERFACE
+/**
+ * PUBLIC_INTERFACE
+ */
 export function getBackendBaseUrl() {
   /**
    * This function resolves the backend base URL.
    * Precedence:
    * 1) process.env.REACT_APP_BACKEND_URL
-   * 2) If running under a preview/proxy path, try to use the same origin with /api prefix
+   * 2) If running in the browser:
+   *    - If current port is 3000 (CRA dev/preview), assume backend on same host at port 3001.
+   *    - Otherwise, use window.location.origin.
    * 3) Fallback to http://localhost:3001
+   *
+   * Note: Endpoints include '/api' path segments already.
    */
   const envUrl = process?.env?.REACT_APP_BACKEND_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, ''); // trim trailing slash
+    return envUrl.replace(/\/+$/, ''); // trim trailing slashes
   }
 
   try {
-    // If the frontend is served via the same origin with a dev proxy, we can try relative /api.
-    // This covers setups where the backend is reverse-proxied under the same host.
-    const { origin } = window.location;
-    if (origin) {
-      // Not adding /api here; endpoints below include /api path segments already.
-      return origin.replace(/\/+$/, '');
+    if (typeof window !== 'undefined' && window.location) {
+      const { protocol, hostname, port, origin } = window.location;
+
+      // If we're on the frontend default port (3000), prefer the backend default (3001)
+      if (port === '3000') {
+        const backendUrl = `${protocol}//${hostname}:3001`;
+        return backendUrl.replace(/\/+$/, '');
+      }
+
+      if (origin) {
+        return origin.replace(/\/+$/, '');
+      }
     }
-  } catch (e) {
+  } catch (_) {
     // ignore and continue to fallback
   }
 
-  // Default fallback for local development
+  // Default fallback for local development and non-browser environments
   return 'http://localhost:3001';
 }
 
