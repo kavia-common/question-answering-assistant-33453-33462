@@ -61,6 +61,7 @@ export default function App() {
   const [theme, setTheme] = useState('light'); // default to light as requested
   const [question, setQuestion] = useState('');
   const [history, setHistory] = useState([]); // array of QARecord
+  const [historyLoadError, setHistoryLoadError] = useState(null); // track history load errors separately
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeRecord, setActiveRecord] = useState(null); // currently displayed answer
@@ -70,20 +71,41 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Validate history response is an array of objects
+  function normalizeHistory(h) {
+    // If backend returns something unexpected, coerce to array and note error
+    if (Array.isArray(h)) {
+      return h.filter((x) => x && typeof x === 'object');
+    }
+    return [];
+  }
+
   // Fetch initial history on mount
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
         const h = await getHistory();
-        if (mounted) {
-          setHistory(h || []);
-          if ((h || []).length > 0) {
-            setActiveRecord(h[0]); // most recent first per API spec
-          }
+        if (!mounted) return;
+
+        // Type guard: ensure array per backend contract
+        const normalized = normalizeHistory(h);
+        setHistory(normalized);
+
+        if (normalized.length > 0) {
+          setActiveRecord(normalized[0]); // most recent first per API spec
+        }
+
+        // If response was not an array, expose a gentle warning
+        if (!Array.isArray(h)) {
+          setHistoryLoadError('History is temporarily unavailable (unexpected response).');
+        } else {
+          setHistoryLoadError(null);
         }
       } catch (e) {
         if (mounted) {
+          setHistory([]); // ensure safe default
+          setHistoryLoadError('Failed to load history.');
           setError(readableError(e));
         }
       }
@@ -129,11 +151,14 @@ export default function App() {
     setLoading(true);
     try {
       const record = await askQuestion(q);
-      // Prepend to history (most recent first)
-      const next = [record, ...history];
+      // Prepend to history (most recent first) — ensure history is an array
+      const safeHistory = Array.isArray(history) ? history : [];
+      const next = [record, ...safeHistory];
       setHistory(next);
       setActiveRecord(record);
       setQuestion('');
+      // Clear any prior history load warning (we now have valid data)
+      if (historyLoadError) setHistoryLoadError(null);
     } catch (err) {
       setError(readableError(err));
     } finally {
@@ -172,37 +197,44 @@ export default function App() {
           <div className="sidebar-header">
             <h2>History</h2>
           </div>
+          {/* Fallback UI or error if history is unavailable */}
+          {historyLoadError && (
+            <div className="qa-error" role="status" aria-live="polite">
+              {historyLoadError}
+            </div>
+          )}
           <ul className="history-list">
-            {history.length === 0 && (
+            {(!Array.isArray(history) || history.length === 0) && !historyLoadError && (
               <li className="history-empty">No history yet. Ask your first question!</li>
             )}
-            {history.map((item) => (
-              <li
-                key={item.id ?? `${item.question}-${item.created_at ?? ''}`}
-                className={
-                  'history-item ' +
-                  (activeRecord && (activeRecord.id === item.id || activeRecord.created_at === item.created_at)
-                    ? 'active'
-                    : '')
-                }
-                onClick={() => setActiveRecord(item)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(ev) => {
-                  if (ev.key === 'Enter' || ev.key === ' ') setActiveRecord(item);
-                }}
-              >
-                <div className="history-question" title={item.question}>
-                  {item.question}
-                </div>
-                <div className="history-answer" title={item.answer}>
-                  {item.answer || '—'}
-                </div>
-                <div className="history-meta">
-                  {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
-                </div>
-              </li>
-            ))}
+            {Array.isArray(history) &&
+              history.map((item) => (
+                <li
+                  key={item.id ?? `${item.question}-${item.created_at ?? ''}`}
+                  className={
+                    'history-item ' +
+                    (activeRecord && (activeRecord.id === item.id || activeRecord.created_at === item.created_at)
+                      ? 'active'
+                      : '')
+                  }
+                  onClick={() => setActiveRecord(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') setActiveRecord(item);
+                  }}
+                >
+                  <div className="history-question" title={item.question}>
+                    {item.question}
+                  </div>
+                  <div className="history-answer" title={item.answer}>
+                    {item.answer || '—'}
+                  </div>
+                  <div className="history-meta">
+                    {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                  </div>
+                </li>
+              ))}
           </ul>
         </aside>
 
