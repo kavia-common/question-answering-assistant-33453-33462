@@ -133,8 +133,28 @@ export default function App() {
 
   function readableError(e) {
     if (!e) return 'Unknown error';
-    if (e.detail) return typeof e.detail === 'string' ? e.detail : JSON.stringify(e.detail);
+
+    // Prefer backend-provided detail if available
+    if (e.detail) {
+      const detailTxt = typeof e.detail === 'string' ? e.detail : (() => { try { return JSON.stringify(e.detail); } catch { return 'Error detail unavailable'; } })();
+      if (e.status && e.url) {
+        return `${detailTxt} (status ${e.status})`;
+      }
+      return detailTxt;
+    }
+
+    // Include status text when present
+    if (e.status || e.url) {
+      const baseMsg = e.message || 'Request failed';
+      const parts = [];
+      parts.push(baseMsg);
+      if (e.status) parts.push(`status ${e.status}`);
+      if (e.url) parts.push(`url ${e.url}`);
+      return parts.join(' — ');
+    }
+
     if (e.message) return e.message;
+
     try {
       return JSON.stringify(e);
     } catch {
@@ -160,6 +180,17 @@ export default function App() {
       // Clear any prior history load warning (we now have valid data)
       if (historyLoadError) setHistoryLoadError(null);
     } catch (err) {
+      // Log with context for debugging last submit attempt
+      try {
+        console.error('[qa] submit error', {
+          question: q,
+          error_message: err?.message || String(err),
+          status: err?.status,
+          url: err?.url,
+          detail: err?.detail,
+          hint: err?.hint
+        });
+      } catch (_) {}
       setError(readableError(err));
     } finally {
       setLoading(false);

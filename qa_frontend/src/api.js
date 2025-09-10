@@ -80,7 +80,17 @@ function buildRequestInit(method = 'GET', data) {
  */
 async function doFetch(path, init) {
   const base = getBackendBaseUrl();
-  const url = `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  const safeBase = typeof base === 'string' ? base.replace(/\/*$/, '') : '';
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = `${safeBase}${normalizedPath}`;
+
+  const method = (init && init.method) || 'GET';
+  // Log outgoing request for diagnostics
+  try {
+    console.debug('[api] request', { method, url, init });
+  } catch (_) {
+    // ignore logging errors
+  }
 
   let resp;
   try {
@@ -90,6 +100,15 @@ async function doFetch(path, init) {
     const err = new Error('Network error while contacting backend');
     err.cause = networkErr;
     err.url = url;
+
+    // Helpful hint for mixed-content or CORS in browser env
+    if (typeof window !== 'undefined') {
+      err.hint = 'Check backend availability, CORS, and protocol/port.';
+    }
+
+    try {
+      console.error('[api] network error', { method, url, error: networkErr?.message || networkErr });
+    } catch (_) {}
     throw err;
   }
 
@@ -117,8 +136,16 @@ async function doFetch(path, init) {
     err.status = resp.status;
     err.url = url;
     err.detail = detail;
+
+    try {
+      console.error('[api] response error', { method, url, status: resp.status, statusText: resp.statusText, detail });
+    } catch (_) {}
     throw err;
   }
+
+  try {
+    console.debug('[api] response ok', { method, url, status: resp.status });
+  } catch (_) {}
 
   if (isJson) {
     return resp.json();
