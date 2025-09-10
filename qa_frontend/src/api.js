@@ -1,4 +1,5 @@
 //
+//
 // Frontend API client for Q&A endpoints
 //
 // Uses REACT_APP_BACKEND_URL if provided; otherwise falls back to a detected backend URL.
@@ -18,27 +19,40 @@ export function getBackendBaseUrl() {
    * 3) Fallback to http://localhost:3001
    *
    * Note: Endpoints include '/api' path segments already.
+   *
+   * This function must NEVER throw. It should always return a string.
    */
-  const envUrl = process?.env?.REACT_APP_BACKEND_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
-    return envUrl.replace(/\/+$/, ''); // trim trailing slashes
+  try {
+    // Safely read env var without referencing an undefined global
+    const envUrl =
+      (typeof process !== 'undefined' &&
+        process &&
+        process.env &&
+        process.env.REACT_APP_BACKEND_URL) ||
+      '';
+
+    if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
+      return envUrl.replace(/\/*$/, ''); // trim trailing slashes
+    }
+  } catch {
+    // ignore, continue to next strategies
   }
 
   try {
-    if (typeof window !== 'undefined' && window.location) {
+    if (typeof window !== 'undefined' && window && window.location) {
       const { protocol, hostname, port, origin } = window.location;
 
       // If we're on the frontend default port (3000), prefer the backend default (3001)
       if (port === '3000') {
         const backendUrl = `${protocol}//${hostname}:3001`;
-        return backendUrl.replace(/\/+$/, '');
+        return backendUrl.replace(/\/*$/, '');
       }
 
       if (origin) {
-        return origin.replace(/\/+$/, '');
+        return origin.replace(/\/*$/, '');
       }
     }
-  } catch (_) {
+  } catch {
     // ignore and continue to fallback
   }
 

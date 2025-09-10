@@ -2,6 +2,52 @@ import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { askQuestion, getHistory, getBackendBaseUrl } from './api';
 
+/**
+ * Simple error boundary to prevent total blank screen on render errors.
+ */
+class ErrorBoundary extends React.Component {
+  // PUBLIC_INTERFACE
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    // Could add logging here
+    // console.error('App render error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="App">
+          <header className="qa-header">
+            <div className="brand">
+              <div className="brand-logo" aria-hidden="true">Q</div>
+              <div className="brand-text">
+                <h1 className="app-title">Q&A Assistant</h1>
+                <p className="app-subtitle">An error occurred while rendering.</p>
+              </div>
+            </div>
+          </header>
+          <main className="qa-main">
+            <section className="qa-content">
+              <div className="qa-error" role="alert">
+                {this.state.error?.message || 'Unexpected error'}
+              </div>
+            </section>
+          </main>
+          <footer className="qa-footer">
+            <span>Built with ❤️ — Modern Light Theme</span>
+          </footer>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // PUBLIC_INTERFACE
 export default function App() {
   /**
@@ -53,7 +99,15 @@ export default function App() {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  const backendInfo = useMemo(() => getBackendBaseUrl(), []);
+  const backendInfo = useMemo(() => {
+    try {
+      const url = getBackendBaseUrl();
+      if (typeof url === 'string' && url.length > 0) return url;
+    } catch {
+      // ignore
+    }
+    return 'backend: unavailable';
+  }, []);
 
   function readableError(e) {
     if (!e) return 'Unknown error';
@@ -88,8 +142,9 @@ export default function App() {
   }
 
   return (
-    <div className="App">
-      <header className="qa-header">
+    <ErrorBoundary>
+      <div className="App">
+        <header className="qa-header">
         <div className="brand">
           <div className="brand-logo" aria-hidden="true">Q</div>
           <div className="brand-text">
@@ -201,6 +256,7 @@ export default function App() {
       <footer className="qa-footer">
         <span>Built with ❤️ — Modern Light Theme</span>
       </footer>
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 }
