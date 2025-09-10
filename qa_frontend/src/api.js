@@ -15,15 +15,15 @@ export function getBackendBaseUrl() {
    * 1) process.env.REACT_APP_BACKEND_URL
    * 2) If running in the browser:
    *    - If current port is 3000 (CRA dev/preview), assume backend on same host at port 3001.
-   *    - Otherwise, use window.location.origin.
+   *    - Otherwise, use window.location.origin with port preserved.
    * 3) Fallback to http://localhost:3001
    *
    * Note: Endpoints include '/api' path segments already.
    *
    * This function must NEVER throw. It should always return a string.
    */
+  let resolved = 'http://localhost:3001';
   try {
-    // Safely read env var without referencing an undefined global
     const envUrl =
       (typeof process !== 'undefined' &&
         process &&
@@ -32,32 +32,28 @@ export function getBackendBaseUrl() {
       '';
 
     if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
-      return envUrl.replace(/\/*$/, ''); // trim trailing slashes
-    }
-  } catch {
-    // ignore, continue to next strategies
-  }
-
-  try {
-    if (typeof window !== 'undefined' && window && window.location) {
+      resolved = envUrl.replace(/\/*$/, '');
+    } else if (typeof window !== 'undefined' && window && window.location) {
       const { protocol, hostname, port, origin } = window.location;
-
-      // If we're on the frontend default port (3000), prefer the backend default (3001)
       if (port === '3000') {
-        const backendUrl = `${protocol}//${hostname}:3001`;
-        return backendUrl.replace(/\/*$/, '');
+        resolved = `${protocol}//${hostname}:3001`;
+      } else if (origin) {
+        resolved = origin;
+      } else {
+        resolved = `${protocol}//${hostname}${port ? `:${port}` : ''}`;
       }
-
-      if (origin) {
-        return origin.replace(/\/*$/, '');
-      }
+      resolved = resolved.replace(/\/*$/, '');
     }
   } catch {
-    // ignore and continue to fallback
+    // keep default
   }
 
-  // Default fallback for local development and non-browser environments
-  return 'http://localhost:3001';
+  // Diagnostics to clearly log the resolved backend URL
+  try {
+    console.info('[api] Resolved backend base URL:', resolved);
+  } catch (_) {}
+
+  return resolved;
 }
 
 /**
@@ -81,7 +77,10 @@ function buildRequestInit(method = 'GET', data) {
 async function doFetch(path, init) {
   const base = getBackendBaseUrl();
   const safeBase = typeof base === 'string' ? base.replace(/\/*$/, '') : '';
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  // Ensure path has leading slash and ends with trailing slash as required
+  const hasLeading = path.startsWith('/');
+  const hasTrailing = path.endsWith('/');
+  const normalizedPath = `${hasLeading ? '' : '/'}${path}${hasTrailing ? '' : '/'}`;
   const url = `${safeBase}${normalizedPath}`;
 
   const method = (init && init.method) || 'GET';
@@ -176,7 +175,8 @@ export async function askQuestion(question) {
   }
 
   const payload = { question: question.trim() };
-  return doFetch('/api/qa/ask', buildRequestInit('POST', payload));
+  // Ensure trailing slash in endpoint per backend spec
+  return doFetch('/api/qa/ask/', buildRequestInit('POST', payload));
 }
 
 // PUBLIC_INTERFACE
@@ -193,5 +193,6 @@ export async function getHistory() {
    * Throws:
    *  - Error with details if the request fails or the backend returns a non-2xx response.
    */
-  return doFetch('/api/qa/history', buildRequestInit('GET'));
+  // Ensure trailing slash in endpoint per backend spec
+  return doFetch('/api/qa/history/', buildRequestInit('GET'));
 }
