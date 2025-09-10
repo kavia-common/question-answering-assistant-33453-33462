@@ -1,28 +1,23 @@
 //
-//
 // Frontend API client for Q&A endpoints
 //
-// Uses REACT_APP_BACKEND_URL if provided; otherwise falls back to a detected backend URL.
-// For local development the default fallback is http://localhost:3001.
+// Uses REACT_APP_BACKEND_URL if provided; otherwise defaults to the running backend at port 3001.
+// All remaining fallbacks that could lead to port 4000 (or other unintended ports) are removed.
 //
 /**
  * PUBLIC_INTERFACE
  */
 export function getBackendBaseUrl() {
   /**
-   * This function resolves the backend base URL.
+   * Resolve the backend base URL.
    * Precedence:
-   * 1) process.env.REACT_APP_BACKEND_URL
-   * 2) If running in the browser:
-   *    - If current port is 3000 (CRA dev/preview), assume backend on same host at port 3001.
-   *    - Otherwise, use window.location.origin with port preserved.
-   * 3) Fallback to http://localhost:3001
+   * 1) process.env.REACT_APP_BACKEND_URL (if provided)
+   * 2) Default to the known backend preview URL on port 3001.
    *
-   * Note: Endpoints include '/api' path segments already.
-   *
-   * This function must NEVER throw. It should always return a string.
+   * This function must NEVER throw. It should always return a string without trailing slash.
    */
-  let resolved = 'http://localhost:3001';
+  const DEFAULT_BACKEND = 'https://vscode-internal-28123-beta.beta01.cloud.kavia.ai:3001';
+  let resolved = DEFAULT_BACKEND;
   try {
     const envUrl =
       (typeof process !== 'undefined' &&
@@ -32,17 +27,10 @@ export function getBackendBaseUrl() {
       '';
 
     if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
-      resolved = envUrl.replace(/\/*$/, '');
-    } else if (typeof window !== 'undefined' && window && window.location) {
-      const { protocol, hostname, port, origin } = window.location;
-      if (port === '3000') {
-        resolved = `${protocol}//${hostname}:3001`;
-      } else if (origin) {
-        resolved = origin;
-      } else {
-        resolved = `${protocol}//${hostname}${port ? `:${port}` : ''}`;
-      }
-      resolved = resolved.replace(/\/*$/, '');
+      resolved = envUrl.trim().replace(/\/*$/, '');
+    } else {
+      // Always use the default 3001 backend in preview/browser scenarios
+      resolved = DEFAULT_BACKEND;
     }
   } catch {
     // keep default
@@ -50,6 +38,7 @@ export function getBackendBaseUrl() {
 
   // Diagnostics to clearly log the resolved backend URL
   try {
+    // eslint-disable-next-line no-console
     console.info('[api] Resolved backend base URL:', resolved);
   } catch (_) {}
 
@@ -84,9 +73,11 @@ async function doFetch(path, init) {
   const url = `${safeBase}${normalizedPath}`;
 
   const method = (init && init.method) || 'GET';
-  // Log outgoing request for diagnostics
+
+  // Log outgoing request for diagnostics - always include the backend URL used
   try {
-    console.debug('[api] request', { method, url, init });
+    // eslint-disable-next-line no-console
+    console.debug('[api] request', { method, url, backendBase: safeBase, init });
   } catch (_) {
     // ignore logging errors
   }
@@ -106,6 +97,7 @@ async function doFetch(path, init) {
     }
 
     try {
+      // eslint-disable-next-line no-console
       console.error('[api] network error', { method, url, error: networkErr?.message || networkErr });
     } catch (_) {}
     throw err;
@@ -137,12 +129,14 @@ async function doFetch(path, init) {
     err.detail = detail;
 
     try {
+      // eslint-disable-next-line no-console
       console.error('[api] response error', { method, url, status: resp.status, statusText: resp.statusText, detail });
     } catch (_) {}
     throw err;
   }
 
   try {
+    // eslint-disable-next-line no-console
     console.debug('[api] response ok', { method, url, status: resp.status });
   } catch (_) {}
 
